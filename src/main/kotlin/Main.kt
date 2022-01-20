@@ -16,7 +16,11 @@
  *     along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import lavalink.client.io.FunctionalResultHandler
 import lavalink.client.io.jda.JdaLavalink
+import lavalink.client.player.event.PlayerEvent
+import lavalink.client.player.event.TrackExceptionEvent
+import lavalink.client.player.event.TrackStartEvent
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.JDABuilder
 import net.dv8tion.jda.api.events.GenericEvent
@@ -24,17 +28,22 @@ import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.EventListener
 import net.dv8tion.jda.api.requests.GatewayIntent
 import net.dv8tion.jda.api.utils.cache.CacheFlag
+import java.net.URI
 import java.util.*
+
+lateinit var lavalink: JdaLavalink
 
 fun main() {
     lateinit var jda: JDA
     val token = System.getenv("TOKEN")
     val userId = token.extractId()
 
-    val lavalink = JdaLavalink(
+    lavalink = JdaLavalink(
         userId,
         1
     ) { jda }
+
+    lavalink.addNode(URI.create("ws://localhost:2333"), "youshallnotpass")
 
     jda = JDABuilder.createDefault(token)
         .enableIntents(GatewayIntent.GUILD_VOICE_STATES)
@@ -55,15 +64,61 @@ fun onMessage(event: MessageReceivedEvent) {
     if (!message.isFromGuild) return
     if (!message.contentRaw.startsWith("!")) return
 
-    val (invoke, args) = message.contentRaw.substring(1).split("\\s+".toRegex(), 2)
+    val split = message.contentRaw.substring(1).split("\\s+".toRegex(), 2)
 
-    when (invoke) {
-        "play" -> playSong(event, args)
+    when (split[0]) {
+        "play" -> playSong(event, split[1])
+        "leave" -> {
+            event.guild.audioManager.closeAudioConnection()
+        }
     }
 }
 
 fun playSong(event: MessageReceivedEvent, args: String) {
+    connectToChannelFirst(event)
 
+    val link = lavalink.getLink(event.guild)
+
+    link.player.addListener {  }
+
+    link.restClient.loadItem(args, FunctionalResultHandler(
+        {
+            event.channel.sendMessage("Loaded ${it.info.title}").queue()
+            event.channel.sendMessage("Length: ${it.info.length}").queue()
+
+            link.player.playTrack(it)
+        },
+        null, null,
+        {
+            event.channel.sendMessage("No matches").queue()
+        }, {
+            event.channel.sendMessage("Error: ${it.message}").queue()
+            it.printStackTrace()
+        }
+    ))
 }
 
-fun String.extractId() = String(Base64.getDecoder().decode(this.split("\\.")[0]))
+fun connectToChannelFirst(event: MessageReceivedEvent) {
+    val self = event.guild.selfMember.voiceState!!
+    val memberVS = event.member!!.voiceState!!
+
+    if (self.inVoiceChannel()) return
+    if (!memberVS.inVoiceChannel()) return
+
+    event.guild.audioManager.openAudioConnection(memberVS.channel!!)
+
+    lavalink.getLink(event.guild).player.addListener(::handlePlayerEvent)
+}
+
+fun handlePlayerEvent(event: PlayerEvent) {
+    when (event) {
+        is TrackStartEvent -> {
+            println("${event.track.info.title} started playing")
+        }
+        is TrackExceptionEvent -> {
+            event.exception.printStackTrace()
+        }
+    }
+}
+
+fun String.extractId() = String(Base64.getDecoder().decode(this.split(".")[0]))

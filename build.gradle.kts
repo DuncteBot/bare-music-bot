@@ -16,7 +16,7 @@ repositories {
 dependencies {
     implementation("ch.qos.logback:logback-classic:1.2.10")
     implementation("net.dv8tion:JDA:5.0.0-alpha.4")
-    implementation("com.github.KittyBot-Org:Lavalink-Client:v1.0.0")
+    implementation("com.github.KittyBot-Org:Lavalink-Client:v1.0.1")
 }
 
 tasks.withType<KotlinCompile> {
