@@ -23,6 +23,7 @@ import lavalink.client.player.event.TrackExceptionEvent
 import lavalink.client.player.event.TrackStartEvent
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.JDABuilder
+import net.dv8tion.jda.api.entities.MessageChannel
 import net.dv8tion.jda.api.events.GenericEvent
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.EventListener
@@ -79,8 +80,6 @@ fun playSong(event: MessageReceivedEvent, args: String) {
 
     val link = lavalink.getLink(event.guild)
 
-    link.player.addListener {  }
-
     link.restClient.loadItem(args, FunctionalResultHandler(
         {
             event.channel.sendMessage("Loaded ${it.info.title}").queue()
@@ -107,15 +106,16 @@ fun connectToChannelFirst(event: MessageReceivedEvent) {
 
     event.guild.audioManager.openAudioConnection(memberVS.channel!!)
 
-    lavalink.getLink(event.guild).player.addListener(::handlePlayerEvent)
+    lavalink.getLink(event.guild).player.addListener { handlePlayerEvent(it, event.channel) }
 }
 
-fun handlePlayerEvent(event: PlayerEvent) {
+fun handlePlayerEvent(event: PlayerEvent, channel: MessageChannel) {
     when (event) {
         is TrackStartEvent -> {
-            println("${event.track.info.title} started playing")
+            println("'${event.track.info.title}' started playing")
         }
         is TrackExceptionEvent -> {
+            channel.sendMessage("Error: ${event.exception.message}").queue()
             event.exception.printStackTrace()
         }
     }
